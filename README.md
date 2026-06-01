@@ -1,79 +1,78 @@
 # srvcs-movingaverage
 
-Statistics microservice for srvcs.cloud: the **moving (sliding-window) average**
-of a list of numbers.
+## Name
 
-This service is an orchestrator. It owns the sliding-window control flow but
-delegates every arithmetic step to its dependencies:
+| Field | Value |
+| --- | --- |
+| Service | `srvcs-movingaverage` |
+| Slug | `movingaverage` |
+| Repository | `srvcs/movingaverage` |
+| Package | `srvcs-movingaverage` |
+| Kind | `orchestrator` |
 
-- [`srvcs-sum`](https://github.com/srvcs/sum) — sums each window slice.
-- [`srvcs-floatdivide`](https://github.com/srvcs/floatdivide) — divides each
-  window sum by the window size to produce the average.
+## Function
 
-It does **not** call `srvcs-isnumber` directly; element validation propagates
-from `srvcs-sum`'s `422`.
+statistics: moving (sliding-window) average
+
+## Dependencies
+
+| Dependency | Repository |
+| --- | --- |
+| `srvcs-sum` | [srvcs/sum](https://github.com/srvcs/sum) |
+| `srvcs-floatdivide` | [srvcs/floatdivide](https://github.com/srvcs/floatdivide) |
 
 ## API
 
-### `GET /`
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | Service identity |
+| `POST` | `/` | Evaluate the service function |
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe |
+| `GET` | `/metrics` | Prometheus metrics |
+| `GET` | `/openapi.json` | OpenAPI document |
 
-Service identity.
+## Inputs
 
-```json
-{
-  "service": "srvcs-movingaverage",
-  "concern": "statistics: moving (sliding-window) average",
-  "depends_on": ["srvcs-sum", "srvcs-floatdivide"]
-}
-```
+| Name | Type | Required |
+| --- | --- | --- |
+| `values` | `json[]` | yes |
+| `window` | `integer` | yes |
 
-### `POST /`
+## Outputs
 
-Request:
-
-```json
-{ "values": [1, 2, 3, 4], "window": 2 }
-```
-
-Response `200`:
-
-```json
-{ "values": [1, 2, 3, 4], "window": 2, "result": [1.5, 2.5, 3.5] }
-```
-
-#### Algorithm
-
-`window` must be `>= 1` and `<= values.len()`, otherwise `422`. For each start
-`i` in `0..=(values.len() - window)`, the window slice `values[i..i+window]` is
-summed via `srvcs-sum`, then divided by `window` via `srvcs-floatdivide`; the
-quotient is pushed onto `result`.
-
-#### Status codes
-
-- `200` — the list of windowed averages.
-- `422` — `window` out of range, or a dependency rejected an input (forwarded).
-- `500` — a reachable dependency returned a malformed result.
-- `503` — a dependency is unavailable.
+| Name | Type |
+| --- | --- |
+| `values` | `json[]` |
+| `window` | `integer` |
+| `result` | `number[]` |
 
 ## Configuration
 
-| Variable                 | Default                  | Description                       |
-| ------------------------ | ------------------------ | --------------------------------- |
-| `SRVCS_BIND_ADDR`        | `0.0.0.0:8080`           | Listen address.                   |
-| `SRVCS_SUM_URL`          | `http://127.0.0.1:8088`  | Base URL of `srvcs-sum`.          |
-| `SRVCS_FLOATDIVIDE_URL`  | `http://127.0.0.1:8089`  | Base URL of `srvcs-floatdivide`.  |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SRVCS_BIND_ADDR` | `0.0.0.0:8080` | Bind address |
+| `SRVCS_ENV` | `development` | Environment label for logs |
+| `RUST_LOG` | `info,tower_http=info` | Tracing filter |
+| `SRVCS_FLOATDIVIDE_URL` | `http://127.0.0.1:8089` | Base URL for srvcs-floatdivide |
+| `SRVCS_SUM_URL` | `http://127.0.0.1:8088` | Base URL for srvcs-sum |
 
-## Local checks
+## Error Behavior
+
+- `422` means the request could not be evaluated for the documented input shape.
+- `503` means a required dependency was unavailable or returned an unexpected response.
+- Dependency validation errors are forwarded when this service delegates validation.
+
+## Local Checks
 
 ```sh
-nix flake check -L
-nix develop -c sh -euc 'cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test'
-nix build .#default -L
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
 ```
 
-The Linux container is exposed as `.#container`. On Apple Silicon, use
-`linux/arm64` for the practical local check; CI builds the release image on
-native `x86_64-linux`.
+See the [srvcs service standard](https://github.com/srvcs/platform/blob/main/STANDARD.md) for the full operational contract.
 
-See [`srvcs/platform`](https://github.com/srvcs/platform) for the shared service
-standard and CI workflow.
+## Metadata
+
+Machine-readable service metadata lives in `srvcs.yaml`. Keep it aligned with this README when the service contract changes.
